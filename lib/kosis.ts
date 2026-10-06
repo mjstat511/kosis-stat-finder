@@ -42,6 +42,42 @@ function toKosisTable(raw: RawKosisTable): KosisTable {
   };
 }
 
+// KOSIS 주소로 요청을 보내 결과(JSON)를 돌려준다. 검색과 수치 조회가 함께 쓴다.
+// 키는 여기서 붙이며, 오류 메시지에는 주소(키가 들어 있다)를 넣지 않는다.
+export async function kosisGet(
+  url: string,
+  params: Record<string, string>,
+): Promise<unknown> {
+  const query = new URLSearchParams({
+    ...params,
+    apiKey: getServerEnv("KOSIS_API_KEY"),
+    format: "json",
+    jsonVD: "Y",
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${url}?${query}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error("KOSIS에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+  if (!res.ok) {
+    throw new Error(`KOSIS 응답 오류입니다. (HTTP ${res.status})`);
+  }
+  return res.json();
+}
+
+// 오류나 결과 없음은 배열이 아니라 {err, errMsg} 객체로 온다.
+// 결과 없음(코드 30)이면 null, 그 밖의 오류는 한국어 오류로 바꾼다.
+export function readKosisError(data: unknown): null {
+  const { err, errMsg } = (data ?? {}) as { err?: string; errMsg?: string };
+  if (err === "30") return null;
+  throw new Error(`KOSIS 오류: ${errMsg ?? "알 수 없는 오류"} (코드 ${err ?? "?"})`);
+}
+
 // 키워드로 KOSIS 통계표를 검색한다. 결과가 없으면 빈 배열을 돌려준다.
 // 오류 메시지에는 주소(키가 들어 있다)를 넣지 않는다.
 export async function searchKosisTables(
@@ -53,37 +89,16 @@ export async function searchKosisTables(
     throw new Error("검색어가 비어 있습니다.");
   }
 
-  const params = new URLSearchParams({
+  const data = await kosisGet(SEARCH_URL, {
     method: "getList",
-    apiKey: getServerEnv("KOSIS_API_KEY"),
-    format: "json",
-    jsonVD: "Y",
     searchNm,
     sort: "RANK",
     startCount: "1",
     resultCount: String(limit),
   });
 
-  let res: Response;
-  try {
-    res = await fetch(`${SEARCH_URL}?${params}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch {
-    throw new Error("KOSIS에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  }
-  if (!res.ok) {
-    throw new Error(`KOSIS 응답 오류입니다. (HTTP ${res.status})`);
-  }
-
-  const data: unknown = await res.json();
-
-  // 오류나 결과 없음은 배열이 아니라 {err, errMsg} 객체로 온다.
   if (!Array.isArray(data)) {
-    const { err, errMsg } = (data ?? {}) as { err?: string; errMsg?: string };
-    if (err === "30") return []; // 데이터가 존재하지 않음 = 검색 결과 없음
-    throw new Error(`KOSIS 오류: ${errMsg ?? "알 수 없는 오류"} (코드 ${err ?? "?"})`);
+    return readKosisError(data) ?? [];
   }
 
   return (data as RawKosisTable[]).map(toKosisTable);
