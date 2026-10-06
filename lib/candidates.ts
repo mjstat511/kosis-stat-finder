@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import type { KosisTable } from "@/lib/kosis";
 import { askJson } from "@/lib/openai";
-import type { QuestionAnalysis } from "@/lib/question-analysis";
+import { GENERIC_WORDS, type QuestionAnalysis } from "@/lib/question-analysis";
 import type { CandidateTable } from "@/lib/schemas";
 
 // 후보는 최대 3개 (PRD 5번 must 1 규칙)
@@ -12,6 +12,8 @@ export const MAX_CANDIDATES = 3;
 const REASON_MAX_LENGTH = 80;
 const CLARIFY_MESSAGE_MAX_LENGTH = 80;
 const CLARIFY_OPTION_MAX_LENGTH = 20;
+// AI가 아무것도 고르지 못했을 때 서버가 직접 구제해 내는 후보의 최대 개수
+const MAX_RESCUED = 2;
 const MIN_CLARIFY_OPTIONS = 2;
 const MAX_CLARIFY_OPTIONS = 4;
 
@@ -85,6 +87,24 @@ export function coversPeriod(
   if (start !== null && toYear !== null && toYear < start) return false;
   if (end !== null && fromYear !== null && fromYear > end) return false;
   return true;
+}
+
+// 구제용 검사: 핵심 단어 하나하나가 통계표 이름이나 통계 이름에 글자 그대로 들어 있는가. (공백 무시)
+// 분류 경로까지 넓히지 않는 이유: 분류는 너무 넓어서 관련 없는 표가 섞이기 쉽다.
+function namesContainAllKeywords(table: KosisTable, keywords: string[]): string | null {
+  const wanted = keywords
+    .map(squash)
+    .filter((k) => k.length >= 2 && !GENERIC_WORDS.includes(k));
+  if (wanted.length === 0) return null;
+  const nameText = squash(table.tblName);
+  const statText = squash(table.statName);
+  for (const kw of wanted) {
+    if (!nameText.includes(kw) && !statText.includes(kw)) return null;
+  }
+  // 이유 문장에 쓸 곳: 통계 이름에 있으면 통계 이름, 아니면 표 이름
+  const first =
+    keywords.find((k) => squash(k).length >= 2 && !GENERIC_WORDS.includes(squash(k))) ?? "";
+  return statText.includes(squash(first)) ? `통계 이름 '${table.statName}'` : `표 이름 '${table.tblName}'`;
 }
 
 function describeTable(t: KosisTable, no: number): string {
@@ -183,5 +203,27 @@ export async function selectCandidates(
           : "수록 기간 미상",
     });
   }
+  // AI가 아무것도 고르지 못해도, KOSIS가 위쪽 순위로 준 표 중 이름에 핵심 단어가 그대로 들어 있는 표는
+  // 관련 있을 가능성이 높다. (예: "쌀값" → 표 이름은 "정곡(…)"이지만 통계 이름이 "산지쌀값조사")
+  // 이런 경우에 한해 서버가 직접 최대 2개를 후보로 낸다. 기간 검사는 똑같이 적용한다.
+  if (result.length === 0) {
+    for (const table of tables) {
+      if (result.length >= MAX_RESCUED) break;
+      const where = namesContainAllKeywords(table, analysis.keywords);
+      if (!where) continue;
+      if (!coversPeriod(table, analysis.fromYear, analysis.toYear)) continue;
+      result.push({
+        orgId: table.orgId,
+        tblId: table.tblId,
+        tblName: table.tblName,
+        reason: `${where}에 질문의 핵심 단어가 들어 있어요.`,
+        period:
+          table.startPeriod && table.endPeriod
+            ? `${table.startPeriod}~${table.endPeriod}`
+            : "수록 기간 미상",
+      });
+    }
+  }
+
   return { candidates: result, clarify: null };
 }

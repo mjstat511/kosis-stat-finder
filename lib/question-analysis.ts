@@ -11,6 +11,10 @@ export const QUESTION_MAX_LENGTH = 200;
 // 나라 전체를 뜻하는 말은 통계표에서 고를 "지역"이 아니라 기본값(전국·합계)이므로 지역에서 뺀다.
 const NATIONAL_WORDS = ["전국", "한국", "대한민국", "우리나라", "국내", "나라 전체"];
 
+// 어떤 통계표 이름에도 거의 들어 있지 않은 흔한 말. KOSIS 검색어와 핵심 단어에서 뺀다.
+// ("고용률 추이"를 그대로 검색하면 결과가 엉뚱하거나 비어, "고용률"로 검색해야 한다)
+export const GENERIC_WORDS = ["추이", "변화", "현황", "통계", "추세", "비교", "최근", "자료", "수치"];
+
 // 후보 선별 단계에 넘기는 대체 키워드의 최대 개수
 const MAX_ALT_KEYWORDS = 3;
 const MAX_KEYWORDS = 3;
@@ -108,7 +112,16 @@ export async function analyzeQuestion(input: AnalyzeInput): Promise<QuestionAnal
 
   const clean = (list: string[]) =>
     [...new Set(list.map((s) => s.trim()).filter(Boolean))];
-  const keywords = clean(raw.keywords).slice(0, MAX_KEYWORDS);
+  const dropGeneric = (text: string) =>
+    text
+      .split(/\s+/)
+      .filter((w) => w && !GENERIC_WORDS.includes(w))
+      .join(" ");
+  // 흔한 말을 뺀 핵심 단어. 전부 빠져 버리면(예: "추이"만 남은 경우) 원래 단어를 그대로 쓴다.
+  const keywordsRaw = clean(raw.keywords).slice(0, MAX_KEYWORDS);
+  const keywords = clean(keywordsRaw.map(dropGeneric)).length > 0
+    ? clean(keywordsRaw.map(dropGeneric))
+    : keywordsRaw;
   const validYear = (y: number | null) => (y !== null && y >= 1900 && y <= 2200 ? y : null);
   let fromYear = validYear(raw.fromYear);
   let toYear = validYear(raw.toYear);
@@ -119,7 +132,7 @@ export async function analyzeQuestion(input: AnalyzeInput): Promise<QuestionAnal
   return {
     ...raw,
     keywords,
-    searchQuery: raw.searchQuery.trim() || keywords.join(" "),
+    searchQuery: dropGeneric(raw.searchQuery.trim()) || raw.searchQuery.trim() || keywords.join(" "),
     regions: clean(raw.regions).filter((r) => !NATIONAL_WORDS.includes(r)),
     filterWords: clean(raw.filterWords).filter((w) => !NATIONAL_WORDS.includes(w)),
     fromYear,
