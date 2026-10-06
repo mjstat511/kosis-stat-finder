@@ -64,11 +64,19 @@ export type AnswerDataRow = {
   unit: string;
 };
 
-// 답변 응답. 출처 통계표 이름과 기준 시점은 PLAN 9번에서 서버가 붙인다.
+// 답변의 출처 (서버가 조회 정보에서 붙인다. AI가 쓴 값이 아니다)
+export type AnswerSource = {
+  tableName: string; // 출처 통계표 이름
+  url: string; // KOSIS에서 원본을 볼 수 있는 주소
+};
+
+// 답변 응답
 export type AnswerResponse =
   | {
       status: "answer";
       sentences: string[];
+      source: AnswerSource;
+      period: string; // 기준 시점: 단일이면 "2026년 2분기", 범위면 "2025년 2분기~2026년 2분기"
       calculations: string[]; // 서버가 다시 계산해 만든 계산식
       data: AnswerDataRow[]; // 답변의 근거가 된 조회 수치
       truncated: boolean; // 범위가 넓어 최근 일부만 썼으면 true

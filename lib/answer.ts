@@ -2,9 +2,14 @@ import "server-only";
 
 import { z } from "zod";
 
-import { getTableData, type SelectionHints, type StatRow } from "@/lib/kosis-data";
+import {
+  getTableData,
+  kosisTableUrl,
+  type SelectionHints,
+  type StatRow,
+} from "@/lib/kosis-data";
 import { askJson } from "@/lib/openai";
-import type { AnswerDataRow, AnswerHints } from "@/lib/schemas";
+import type { AnswerDataRow, AnswerHints, AnswerSource } from "@/lib/schemas";
 
 // 답변은 5문장 이내 (PRD 5번 must 2 규칙)
 export const MAX_SENTENCES = 5;
@@ -56,6 +61,8 @@ export type AnswerResult =
   | {
       kind: "answer";
       sentences: string[];
+      source: AnswerSource;
+      period: string;
       calculations: string[];
       data: AnswerDataRow[];
       truncated: boolean;
@@ -216,6 +223,17 @@ function toSelectionHints(h: AnswerHints): SelectionHints {
   };
 }
 
+// 기준 시점: 답변에 실제로 쓴 값들의 시점을 조회 데이터에서 읽어 단일 시점 또는 시작~끝 범위로 만든다.
+// (AI가 쓴 말이 아니라 서버가 조회 결과에서 가져온다. 쓴 값이 없으면 조회한 전체 범위를 쓴다.)
+export function describePeriod(rows: StatRow[], usedLabels: string[]): string {
+  const used = new Set(usedLabels);
+  const picked = rows.filter((r) => used.has(r.periodLabel));
+  const scope = picked.length > 0 ? picked : rows;
+  const first = scope[0].periodLabel;
+  const last = scope[scope.length - 1].periodLabel;
+  return first === last ? first : `${first}~${last}`;
+}
+
 export async function buildAnswer(input: {
   question: string;
   orgId: string;
@@ -290,6 +308,11 @@ export async function buildAnswer(input: {
       return {
         kind: "answer",
         sentences: ai.sentences.map((s) => s.trim()).filter(Boolean),
+        source: {
+          tableName: table.tableName,
+          url: kosisTableUrl(input.orgId, input.tblId),
+        },
+        period: describePeriod(rows, ai.usedValues.map((u) => u.period)),
         calculations: calculations.map((c) => c.text),
         data: rows.map((r) => ({
           periodLabel: r.periodLabel,
