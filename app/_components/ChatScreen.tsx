@@ -12,7 +12,13 @@ const KOSIS_HOME = "https://kosis.kr";
 // 서버가 오래 걸려도 화면이 무한정 기다리지 않게 하는 시간 (서버 최대 실행 시간보다 약간 길게)
 const REQUEST_TIMEOUT_MS = 70_000;
 
+// 서버로 보내는 직전 질문의 최대 길이 (서버의 질문 길이 제한과 같다)
+const MAX_PREVIOUS_LENGTH = 200;
+
 type ClientError = { status: "error" } & ErrorInfo;
+
+// 직전 질문: 사용자가 입력한 문장과, 앞 맥락까지 합쳐 혼자서도 뜻이 통하게 만든 문장
+type PreviousContext = { raw: string; merged: string };
 
 function clientError(message: string, retryable = true): ClientError {
   return { status: "error", message, retryable, kosisUrl: KOSIS_HOME };
@@ -46,6 +52,11 @@ export default function ChatScreen() {
   const [state, setState] = useState<ScreenState>({ kind: "idle" });
   const [previousQuestion, setPreviousQuestion] = useState<string | null>(null);
   const lastQuestion = useRef<string | null>(null);
+  // 후속 질문을 위해 기억하는 "직전 질문" 한 개: 가장 최근에 성공한 질문과, 그 질문을 맥락까지 합친 문장.
+  // 화면에만 있고 저장하지 않으며, 새로고침하면 사라진다. 성공하지 못한 질문 뒤에는 비운다.
+  const contextRef = useRef<PreviousContext | null>(null);
+  // 가장 최근 검색에서 서버에 보낸 직전 질문 (다시 시도할 때 같은 조건으로 보내려고 둔다)
+  const sentPrevious = useRef<PreviousContext | null>(null);
   const controller = useRef<AbortController | null>(null);
 
   // 새 요청을 시작하면 앞선 요청은 취소한다.
@@ -89,14 +100,24 @@ export default function ChatScreen() {
     );
   }
 
-  async function search(question: string) {
+  async function search(question: string, previousOverride?: PreviousContext | null) {
     const signal = startRequest();
-    setPreviousQuestion(lastQuestion.current);
+    const previous = previousOverride !== undefined ? previousOverride : contextRef.current;
+    sentPrevious.current = previous;
+    setPreviousQuestion(previous ? previous.raw : null); // 맥락으로 쓰인 직전 질문만 화면에 보여준다
     lastQuestion.current = question;
     setState({ kind: "searching" });
 
-    const res = await postJson<SearchResponse>("/api/search", { question }, signal);
+    const res = await postJson<SearchResponse>(
+      "/api/search",
+      { question, previousQuestion: previous?.merged.slice(0, MAX_PREVIOUS_LENGTH) ?? null },
+      signal,
+    );
     if (res === null) return;
+
+    // 성공하면 이 질문을 다음 후속 질문의 맥락으로 기억하고, 아니면 비운다.
+    contextRef.current =
+      res.status === "candidates" ? { raw: question, merged: res.contextualQuestion } : null;
 
     switch (res.status) {
       case "candidates": {
@@ -124,7 +145,7 @@ export default function ChatScreen() {
   }
 
   function retrySearch() {
-    if (lastQuestion.current) void search(lastQuestion.current);
+    if (lastQuestion.current) void search(lastQuestion.current, sentPrevious.current);
   }
 
   const searching = state.kind === "searching";
