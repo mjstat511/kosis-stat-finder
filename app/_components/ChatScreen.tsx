@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AnswerResponse, SearchResponse } from "@/lib/schemas";
 import AnswerCard from "./AnswerCard";
 import CandidateList from "./CandidateList";
-import { ErrorNotice, LoadingNotice, NotFoundNotice, RefusedNotice } from "./Notices";
+import { ClarifyNotice, ErrorNotice, LoadingNotice, NotFoundNotice, RefusedNotice } from "./Notices";
 import QuestionForm from "./QuestionForm";
 import type { AnswerState, ErrorInfo, ScreenState } from "./types";
 
@@ -57,6 +57,8 @@ export default function ChatScreen() {
   const contextRef = useRef<PreviousContext | null>(null);
   // 가장 최근 검색에서 서버에 보낸 직전 질문 (다시 시도할 때 같은 조건으로 보내려고 둔다)
   const sentPrevious = useRef<PreviousContext | null>(null);
+  // 가장 최근 검색에서 되묻기에 대한 사용자의 선택 (다시 시도할 때도 같이 보낸다)
+  const sentClarification = useRef<string | null>(null);
   const controller = useRef<AbortController | null>(null);
 
   // 새 요청을 시작하면 앞선 요청은 취소한다.
@@ -100,17 +102,26 @@ export default function ChatScreen() {
     );
   }
 
-  async function search(question: string, previousOverride?: PreviousContext | null) {
+  async function search(
+    question: string,
+    previousOverride?: PreviousContext | null,
+    clarification: string | null = null,
+  ) {
     const signal = startRequest();
     const previous = previousOverride !== undefined ? previousOverride : contextRef.current;
     sentPrevious.current = previous;
+    sentClarification.current = clarification;
     setPreviousQuestion(previous ? previous.raw : null); // 맥락으로 쓰인 직전 질문만 화면에 보여준다
     lastQuestion.current = question;
     setState({ kind: "searching" });
 
     const res = await postJson<SearchResponse>(
       "/api/search",
-      { question, previousQuestion: previous?.merged.slice(0, MAX_PREVIOUS_LENGTH) ?? null },
+      {
+        question,
+        previousQuestion: previous?.merged.slice(0, MAX_PREVIOUS_LENGTH) ?? null,
+        clarification,
+      },
       signal,
     );
     if (res === null) return;
@@ -133,6 +144,9 @@ export default function ChatScreen() {
         void loadAnswer(first.selected, first);
         break;
       }
+      case "clarify":
+        setState({ kind: "clarify", message: res.message, options: res.options });
+        break;
       case "notFound":
         setState({ kind: "notFound", message: res.message, altKeywords: res.altKeywords });
         break;
@@ -145,7 +159,9 @@ export default function ChatScreen() {
   }
 
   function retrySearch() {
-    if (lastQuestion.current) void search(lastQuestion.current, sentPrevious.current);
+    if (lastQuestion.current) {
+      void search(lastQuestion.current, sentPrevious.current, sentClarification.current);
+    }
   }
 
   const searching = state.kind === "searching";
@@ -159,6 +175,18 @@ export default function ChatScreen() {
       />
 
       {searching && <LoadingNotice message="통계표를 찾는 중…" />}
+
+      {state.kind === "clarify" && (
+        <ClarifyNotice
+          clarify={state}
+          onPick={(option) => {
+            // 원래 질문에 선택한 말을 더해 한 번만 다시 찾는다.
+            if (lastQuestion.current) {
+              void search(lastQuestion.current, sentPrevious.current, option);
+            }
+          }}
+        />
+      )}
 
       {state.kind === "notFound" && (
         <NotFoundNotice

@@ -52,6 +52,7 @@ export type SearchResponse =
       contextualQuestion: string;
       hints: AnswerHints;
     }
+  | { status: "clarify"; message: string; options: string[] }
   | { status: "notFound"; message: string; altKeywords: string[] }
   | { status: "refused"; message: string }
   | { status: "error"; message: string; retryable: boolean; kosisUrl: string };
