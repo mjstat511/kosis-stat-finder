@@ -134,7 +134,23 @@ export async function analyzeQuestion(input: AnalyzeInput): Promise<QuestionAnal
 export function toSelectionHints(analysis: QuestionAnalysis): SelectionHints {
   return {
     words: [...analysis.regions, ...analysis.filterWords],
+    topicWords: analysis.keywords,
     periodType: analysis.periodType ?? undefined,
     count: analysis.recentCount ?? undefined,
+    fromYear: analysis.fromYear,
+    toYear: analysis.toYear,
+  };
+}
+
+// 후보 응답에 담아 보냈다가 답변 요청에서 돌려받는 질문 정보
+export function toAnswerHints(analysis: QuestionAnalysis) {
+  return {
+    keywords: analysis.keywords,
+    regions: analysis.regions,
+    filterWords: analysis.filterWords,
+    periodType: analysis.periodType,
+    recentCount: analysis.recentCount,
+    fromYear: analysis.fromYear,
+    toYear: analysis.toYear,
   };
 }

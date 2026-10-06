@@ -1,39 +1,23 @@
 import { selectCandidates } from "@/lib/candidates";
 import { searchKosisTables } from "@/lib/kosis";
 import { AiCallError } from "@/lib/openai";
-import { analyzeQuestion } from "@/lib/question-analysis";
+import { errorBody, toErrorResponse } from "@/lib/api-error";
+import { analyzeQuestion, toAnswerHints } from "@/lib/question-analysis";
 import { SearchRequestSchema, type SearchResponse } from "@/lib/schemas";
 
 // 후보 찾기 API (DESIGN.md 흐름 A). 배포 때 Vercel 요금제 한도를 확인해 값을 조정한다.
 export const maxDuration = 60;
 
-const KOSIS_HOME = "https://kosis.kr";
 const SEARCH_RESULT_COUNT = 10;
 
-function errorResponse(
-  message: string,
-  retryable: boolean,
-  httpStatus: number,
-): Response {
-  const body: SearchResponse = { status: "error", message, retryable, kosisUrl: KOSIS_HOME };
-  return Response.json(body, { status: httpStatus });
-}
-
-// 사용자에게 보여줘도 되는 오류 문구만 골라낸다. 그 밖의 내부 오류는 일반 문구로 바꾼다.
-function toErrorResponse(e: unknown): Response {
-  if (e instanceof AiCallError) return errorResponse(e.message, e.retryable, 502);
-  if (e instanceof Error && e.message.startsWith("KOSIS")) {
-    return errorResponse(e.message, true, 502);
-  }
-  // 질문 원문은 로그에 남기지 않고 오류 이름과 메시지만 남긴다.
-  console.error("[api/search]", e instanceof Error ? `${e.name}: ${e.message}` : "알 수 없는 오류");
-  return errorResponse("일시적인 문제가 생겼어요. 잠시 후 다시 시도해 주세요.", true, 500);
+function badRequest(message: string): Response {
+  return Response.json(errorBody(message, false), { status: 400 });
 }
 
 export async function POST(req: Request): Promise<Response> {
   const parsed = SearchRequestSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return errorResponse("요청 형식이 올바르지 않아요.", false, 400);
+    return badRequest("요청 형식이 올바르지 않아요.");
   }
 
   try {
@@ -44,7 +28,7 @@ export async function POST(req: Request): Promise<Response> {
       }
       throw e;
     });
-    if (analysis instanceof Error) return errorResponse(analysis.message, false, 400);
+    if (analysis instanceof Error) return badRequest(analysis.message);
 
     // 통계와 무관한 질문
     if (!analysis.isStatQuestion) {
@@ -83,9 +67,10 @@ export async function POST(req: Request): Promise<Response> {
       status: "candidates",
       candidates,
       contextualQuestion: analysis.contextualQuestion,
+      hints: toAnswerHints(analysis),
     };
     return Response.json(body);
   } catch (e) {
-    return toErrorResponse(e);
+    return toErrorResponse(e, "api/search");
   }
 }
