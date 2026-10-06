@@ -5,7 +5,7 @@ export type ErrorInfo = { message: string; retryable: boolean; kosisUrl: string 
 
 export type AnswerOk = Extract<AnswerResponse, { status: "answer" }>;
 
-// 되묻기 선택지 (서버 쪽 되묻기를 만들 때 연결한다 · PLAN 7번)
+// 되묻기 문장과 선택지
 export type Clarify = {
   message: string;
   options: string[];
@@ -30,6 +30,7 @@ export type ScreenState =
       question: string; // 맥락을 합친 질문
       answer: AnswerState;
     }
+  | ({ kind: "clarify" } & Clarify) // 후보가 갈려 한 번 되묻는 중
   | { kind: "notFound"; message: string; altKeywords: string[] }
   | { kind: "refused"; message: string }
   | ({ kind: "error" } & ErrorInfo);

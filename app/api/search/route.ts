@@ -53,7 +53,15 @@ export async function POST(req: Request): Promise<Response> {
     const tables = await searchKosisTables(analysis.searchQuery, SEARCH_RESULT_COUNT);
 
     // ⑥⑦ 후보 선별과 서버 검사
-    const candidates = await selectCandidates(analysis, tables);
+    const { candidates, clarify } = await selectCandidates(
+      analysis,
+      tables,
+      Boolean(parsed.data.clarification), // 이미 되물은 뒤면 다시 되묻지 않는다
+    );
+    if (clarify) {
+      const body: SearchResponse = { status: "clarify", ...clarify };
+      return Response.json(body);
+    }
     if (candidates.length === 0) {
       const body: SearchResponse = {
         status: "notFound",
