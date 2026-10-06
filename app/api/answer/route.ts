@@ -37,6 +37,8 @@ export async function POST(req: Request): Promise<Response> {
     const body: AnswerResponse = {
       status: "answer",
       sentences: result.sentences,
+      source: result.source,
+      period: result.period,
       calculations: result.calculations,
       data: result.data,
       truncated: result.truncated,
