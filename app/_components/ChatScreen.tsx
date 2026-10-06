@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AnswerResponse, SearchResponse } from "@/lib/schemas";
 import AnswerCard from "./AnswerCard";
 import CandidateList from "./CandidateList";
@@ -14,6 +14,21 @@ const REQUEST_TIMEOUT_MS = 70_000;
 
 // 서버로 보내는 직전 질문의 최대 길이 (서버의 질문 길이 제한과 같다)
 const MAX_PREVIOUS_LENGTH = 200;
+
+// 다른 페이지에 갔다가 뒤로가기로 돌아와도 화면이 그대로 남도록, 이 브라우저 탭에만 잠시 저장해 둔다.
+// 서버로 보내지 않으며 탭을 닫으면 사라진다. (sessionStorage)
+const VIEW_STORAGE_KEY = "first-trial:view:v1";
+const RESTORABLE_KINDS = ["idle", "clarify", "notFound", "refused", "error", "candidates"];
+
+type SavedView = {
+  state: ScreenState;
+  text: string;
+  previousQuestion: string | null;
+  lastQuestion: string | null;
+  context: PreviousContext | null;
+  sentPrevious: PreviousContext | null;
+  sentClarification: string | null;
+};
 
 type ClientError = { status: "error" } & ErrorInfo;
 
@@ -48,17 +63,21 @@ async function postJson<T>(
 }
 
 // 화면 전체: 질문 → 후보 → 답변 흐름을 하나로 묶고, 서버 API와 연결한다.
-export default function ChatScreen() {
-  const [state, setState] = useState<ScreenState>({ kind: "idle" });
-  const [previousQuestion, setPreviousQuestion] = useState<string | null>(null);
-  const lastQuestion = useRef<string | null>(null);
+// persist: 저장해 둔 화면을 확인한 뒤에만 true. 확인 전에 저장해 버리면 저장해 둔 화면을 덮어쓰기 때문이다.
+function ChatView({ saved, persist }: { saved: SavedView | null; persist: boolean }) {
+  const [state, setState] = useState<ScreenState>(saved?.state ?? { kind: "idle" });
+  const [previousQuestion, setPreviousQuestion] = useState<string | null>(
+    saved?.previousQuestion ?? null,
+  );
+  const [text, setText] = useState(saved?.text ?? ""); // 질문 입력창에 적힌 글자
+  const lastQuestion = useRef<string | null>(saved?.lastQuestion ?? null);
   // 후속 질문을 위해 기억하는 "직전 질문" 한 개: 가장 최근에 성공한 질문과, 그 질문을 맥락까지 합친 문장.
   // 화면에만 있고 저장하지 않으며, 새로고침하면 사라진다. 성공하지 못한 질문 뒤에는 비운다.
-  const contextRef = useRef<PreviousContext | null>(null);
+  const contextRef = useRef<PreviousContext | null>(saved?.context ?? null);
   // 가장 최근 검색에서 서버에 보낸 직전 질문 (다시 시도할 때 같은 조건으로 보내려고 둔다)
-  const sentPrevious = useRef<PreviousContext | null>(null);
+  const sentPrevious = useRef<PreviousContext | null>(saved?.sentPrevious ?? null);
   // 가장 최근 검색에서 되묻기에 대한 사용자의 선택 (다시 시도할 때도 같이 보낸다)
-  const sentClarification = useRef<string | null>(null);
+  const sentClarification = useRef<string | null>(saved?.sentClarification ?? null);
   const controller = useRef<AbortController | null>(null);
 
   // 새 요청을 시작하면 앞선 요청은 취소한다.
@@ -68,6 +87,29 @@ export default function ChatScreen() {
     return controller.current.signal;
   }
   useEffect(() => () => controller.current?.abort(), []);
+
+  // 화면이 바뀔 때마다 저장한다. 요청이 오가는 중에는 저장하지 않는다. (끝난 화면만 저장)
+  useEffect(() => {
+    if (!persist) return;
+    const inFlight =
+      state.kind === "searching" ||
+      (state.kind === "candidates" && state.answer.kind === "loading");
+    if (inFlight) return;
+    const view: SavedView = {
+      state,
+      text,
+      previousQuestion,
+      lastQuestion: lastQuestion.current,
+      context: contextRef.current,
+      sentPrevious: sentPrevious.current,
+      sentClarification: sentClarification.current,
+    };
+    try {
+      sessionStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(view));
+    } catch {
+      // 저장하지 못해도 화면은 정상 동작한다.
+    }
+  }, [persist, state, text, previousQuestion]);
 
   // 선택한 통계표로 답변을 받아 온다. 후보 목록은 그대로 두고 답변 자리만 바꾼다.
   async function loadAnswer(
@@ -169,6 +211,8 @@ export default function ChatScreen() {
   return (
     <div className="flex flex-col gap-6">
       <QuestionForm
+        text={text}
+        onTextChange={setText}
         disabled={searching}
         previousQuestion={previousQuestion}
         onSubmit={(q) => void search(q)}
@@ -231,4 +275,40 @@ export default function ChatScreen() {
       )}
     </div>
   );
+}
+
+// 저장해 둔 화면을 처음 한 번만 읽는다.
+let initialRaw: string | null | undefined;
+function readSavedOnce(): string | null {
+  if (initialRaw === undefined) {
+    try {
+      initialRaw = sessionStorage.getItem(VIEW_STORAGE_KEY);
+    } catch {
+      initialRaw = null; // 저장소를 못 읽으면(비공개 창 등) 처음 화면을 쓴다.
+    }
+  }
+  return initialRaw;
+}
+const noSubscribe = () => () => {};
+
+function parseSaved(raw: string | null): SavedView | null {
+  if (!raw) return null;
+  try {
+    const saved = JSON.parse(raw) as SavedView;
+    return RESTORABLE_KINDS.includes(saved?.state?.kind) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+// 서버가 그린 화면과 브라우저가 처음 그리는 화면은 같아야 하므로, 처음에는 저장분 없이 그리고
+// 브라우저에서 준비가 끝난 뒤(hydrated)에 저장분을 읽어 그 화면으로 다시 시작한다.
+const isBrowser = () => true;
+const isServer = () => false;
+
+export default function ChatScreen() {
+  const hydrated = useSyncExternalStore(noSubscribe, isBrowser, isServer);
+  const saved = hydrated ? parseSaved(readSavedOnce()) : null;
+  // key가 바뀌면 처음부터 새로 그린다.
+  return <ChatView key={saved ? "restored" : "fresh"} saved={saved} persist={hydrated} />;
 }
