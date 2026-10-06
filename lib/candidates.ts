@@ -41,6 +41,7 @@ const SYSTEM_PROMPT = `너는 사용자의 질문에 가장 잘 맞는 KOSIS 통
 - 질문에 답하는 데 쓸 수 있는 통계표만 최대 ${MAX_CANDIDATES}개를 골라 가장 알맞은 것부터 적는다.
 - 질문의 주제가 통계표 이름이나 분류와 실제로 맞아야 한다. 이름만 비슷하고 내용이 다르면 고르지 않는다.
 - 질문에 지역이 있으면 지역별(시도 등) 자료를 담은 통계표를 우선한다.
+- 질문에 기간이 있어도 통계표의 수록 기간이 일부만 겹치거나 한두 해 모자란 것은 이유가 되지 않는다. 주제가 맞으면 고른다.
 - 맞는 통계표가 하나도 없으면 빈 배열로 답한다. 억지로 채우지 않는다.
 - 이유는 한 문장으로, 질문의 어떤 부분과 맞는지 쓴다.
 - 질문이 "물가", "인구"처럼 넓어서 목록에 서로 다른 의미의 통계표(소비자물가·생산자물가·수출입물가 등)가 섞여 있고 사용자가 어느 것을 원하는지 질문만으로는 알 수 없을 때만 clarify를 채우고 picks는 비운다.
@@ -116,22 +117,29 @@ export async function selectCandidates(
   const lines = [
     `질문: ${analysis.contextualQuestion}`,
     analysis.regions.length > 0 ? `지역: ${analysis.regions.join(", ")}` : null,
-    analysis.fromYear !== null || analysis.toYear !== null
-      ? `기간: ${analysis.fromYear ?? "?"}년 ~ ${analysis.toYear ?? "?"}년`
-      : null,
+    // 질문의 기간은 AI에게 알리지 않는다. 수록 기간이 맞는지는 서버가 직접 검사하며(coversPeriod),
+    // 알려 주면 "2026년까지"처럼 한두 해 모자란 표를 AI가 통째로 빼 버리는 일이 있었다.
     alreadyClarified ? "이미 한 번 되물었으므로 clarify는 반드시 null로 하고, 가장 가까운 후보를 고른다." : null,
     "",
     "후보 목록:",
     ...tables.map((t, i) => describeTable(t, i + 1)),
   ].filter((l): l is string => l !== null);
 
-  const { picks, clarify: rawClarify } = await askJson({
-    system: SYSTEM_PROMPT,
-    user: lines.join("\n"),
-    schema: PickSchema,
-    name: "candidate_picks",
-    maxOutputTokens: 700,
-  });
+  // AI 판단이 흔들려 아무것도 고르지 못하는 경우가 있어, 되묻지도 않고 비어 있으면 한 번만 더 확인한다.
+  const ask = (note: string | null) =>
+    askJson({
+      system: SYSTEM_PROMPT,
+      user: [...lines, ...(note ? ["", note] : [])].join("\n"),
+      schema: PickSchema,
+      name: "candidate_picks",
+      maxOutputTokens: 700,
+    });
+  let { picks, clarify: rawClarify } = await ask(null);
+  if (picks.length === 0 && !rawClarify) {
+    ({ picks, clarify: rawClarify } = await ask(
+      "처음에는 아무것도 고르지 못했다. 질문의 주제와 이름이 가장 가까운 통계표가 있으면 1~2개 골라라. 정말 하나도 없을 때만 빈 배열로 답한다.",
+    ));
+  }
 
   // 되묻기는 질문당 한 번만, 선택지가 알맞은 개수일 때만 인정한다.
   const options = [

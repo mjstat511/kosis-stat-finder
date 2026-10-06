@@ -49,15 +49,17 @@ export async function POST(req: Request): Promise<Response> {
       return Response.json(body);
     }
 
-    // ④ KOSIS 통합검색
-    const tables = await searchKosisTables(analysis.searchQuery, SEARCH_RESULT_COUNT);
+    // ④ KOSIS 통합검색 → ⑥⑦ 후보 선별과 서버 검사
+    const alreadyClarified = Boolean(parsed.data.clarification); // 이미 되물은 뒤면 다시 되묻지 않는다
+    let tables = await searchKosisTables(analysis.searchQuery, SEARCH_RESULT_COUNT);
+    let { candidates, clarify } = await selectCandidates(analysis, tables, alreadyClarified);
 
-    // ⑥⑦ 후보 선별과 서버 검사
-    const { candidates, clarify } = await selectCandidates(
-      analysis,
-      tables,
-      Boolean(parsed.data.clarification), // 이미 되물은 뒤면 다시 되묻지 않는다
-    );
+    // KOSIS 검색은 "가구 수"와 "가구수"를 다르게 본다. 못 찾았으면 띄어쓰기를 없앤 검색어로 한 번 더 찾는다.
+    const squashed = analysis.searchQuery.replace(/\s+/g, "");
+    if (candidates.length === 0 && !clarify && squashed !== analysis.searchQuery) {
+      tables = await searchKosisTables(squashed, SEARCH_RESULT_COUNT);
+      ({ candidates, clarify } = await selectCandidates(analysis, tables, alreadyClarified));
+    }
     if (clarify) {
       const body: SearchResponse = { status: "clarify", ...clarify };
       return Response.json(body);
