@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-
 export const MAX_LENGTH = 200;
 
 type Props = {
+  text: string;
+  onTextChange: (text: string) => void;
   disabled: boolean;
   previousQuestion: string | null;
   onSubmit: (question: string) => void;
@@ -12,11 +12,12 @@ type Props = {
 
 // ② 질문 입력: 입력창, 검색 버튼, 개인정보 안내, 글자 수
 export default function QuestionForm({
+  text,
+  onTextChange,
   disabled,
   previousQuestion,
   onSubmit,
 }: Props) {
-  const [text, setText] = useState("");
   const trimmed = text.trim();
   const canSubmit = !disabled && trimmed.length > 0;
 
@@ -41,7 +42,7 @@ export default function QuestionForm({
           maxLength={MAX_LENGTH}
           placeholder="예) 청년 실업률 추이"
           aria-label="질문 입력"
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => onTextChange(e.target.value)}
         />
         <button
           type="submit"
