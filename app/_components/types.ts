@@ -1,33 +1,35 @@
-// 화면에서 쓰는 데이터 모양 (DESIGN.md 2번의 응답 형식에 맞춘 임시 정의)
-// 서버 연결 때 lib/schemas.ts의 검사 모양으로 옮길 예정이다.
+// 화면에서 쓰는 상태 모양. 서버가 주고받는 모양은 lib/schemas.ts에서 가져온다. (타입만 가져오므로 서버 코드는 화면에 들어오지 않는다)
+import type { AnswerHints, AnswerResponse, CandidateTable } from "@/lib/schemas";
 
-export type Candidate = {
-  tblId: string;
-  tblName: string; // 통계표 이름
-  reason: string; // 선택 이유 한 문장
-  period: string; // 수록 기간
-};
+export type ErrorInfo = { message: string; retryable: boolean; kosisUrl: string };
 
-export type Answer = {
-  sentences: string[]; // 답변 문장 (5문장 이내)
-  calculation?: string; // 계산식 (값마다 시점 표시)
-  sourceName: string; // 출처 통계표 이름
-  period: string; // 기준 시점 (단일 시점 또는 시작~끝 범위)
-  kosisUrl: string; // KOSIS 원본 링크
-};
+export type AnswerOk = Extract<AnswerResponse, { status: "answer" }>;
 
+// 되묻기 선택지 (서버 쪽 되묻기를 만들 때 연결한다 · PLAN 7번)
 export type Clarify = {
   message: string;
   options: string[];
 };
 
+// 선택한 후보의 답변이 지금 어떤 상태인지
+export type AnswerState =
+  | { kind: "loading" }
+  | { kind: "done"; answer: AnswerOk }
+  | { kind: "notFound"; message: string }
+  | ({ kind: "error" } & ErrorInfo);
+
 // 화면이 보여줄 수 있는 상태 (DESIGN.md 1번 표)
 export type ScreenState =
   | { kind: "idle" }
-  | { kind: "loading"; message: string }
-  | { kind: "candidates"; candidates: Candidate[]; selected: string }
-  | { kind: "clarify"; clarify: Clarify }
-  | { kind: "notFound"; keywords: string[] }
-  | { kind: "refused" }
-  | { kind: "answer"; candidates: Candidate[]; selected: string; answer: Answer }
-  | { kind: "error"; message: string; kosisUrl: string };
+  | { kind: "searching" }
+  | {
+      kind: "candidates";
+      candidates: CandidateTable[];
+      selected: string; // 선택된 통계표 ID
+      hints: AnswerHints;
+      question: string; // 맥락을 합친 질문
+      answer: AnswerState;
+    }
+  | { kind: "notFound"; message: string; altKeywords: string[] }
+  | { kind: "refused"; message: string }
+  | ({ kind: "error" } & ErrorInfo);

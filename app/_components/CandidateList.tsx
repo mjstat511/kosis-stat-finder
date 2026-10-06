@@ -1,7 +1,7 @@
-import type { Candidate } from "./types";
+import type { CandidateTable } from "@/lib/schemas";
 
 type Props = {
-  candidates: Candidate[];
+  candidates: CandidateTable[];
   selected: string;
   onSelect: (tblId: string) => void;
 };
