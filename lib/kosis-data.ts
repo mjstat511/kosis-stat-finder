@@ -42,9 +42,12 @@ export type TableMeta = {
 
 // 질문에서 뽑은 힌트 (질문 분석 단계가 넘겨준다)
 export type SelectionHints = {
-  words?: string[]; // 지역·항목 등 핵심 단어 (예: ["서울"])
+  words?: string[]; // 지역·분류 단어 (예: ["서울"]). 어디에도 맞지 않으면 unmatchedWords로 알려 준다.
+  topicWords?: string[]; // 주제 단어 (예: ["합계출산율"]). 항목·분류 이름과 맞으면 고르는 데만 쓰고, 맞지 않아도 문제로 보지 않는다.
   periodType?: PeriodType; // 원하는 수록주기 (예: 연도별이면 "Y")
   count?: number; // 가져올 시점 개수
+  fromYear?: number | null; // 질문의 시작 연도 (있으면 이 기간을 가져온다)
+  toYear?: number | null; // 질문의 끝 연도
 };
 
 // 고른 코드: 이 값으로 수치를 조회한다.
@@ -54,6 +57,8 @@ export type Selection = {
   periodType: PeriodType;
   periodCount: number;
   periodEnd: string; // 이 수록주기의 수록 끝 시점 (추계 자료인지 가늠하는 데 쓴다)
+  fromYear: number | null; // 연도 범위로 가져올 때의 시작 연도 (없으면 최근 N개)
+  toYear: number | null;
   unmatchedWords: string[]; // 어디에도 맞지 않은 힌트 (호출한 쪽이 "찾지 못함"으로 처리할지 정한다)
   guessed: string[]; // 힌트도 "전체" 값도 없어서 첫 번째 값을 임시로 고른 단계 이름 (답변에 선택한 분류를 밝혀야 한다)
 };
@@ -73,6 +78,7 @@ export type TableData = {
   tableName: string;
   selection: Selection;
   rows: StatRow[];
+  truncated: boolean; // 범위가 넓어 최근 일부만 남겼으면 true
 };
 
 export function kosisTableUrl(orgId: string, tblId: string): string {
@@ -154,11 +160,16 @@ export async function getTableMeta(
 }
 
 // 힌트 단어와 이름이 맞는 값을 찾는다. 이름이 똑같은 것을 먼저, 없으면 단어를 포함하는 가장 짧은 이름.
-function matchWord<T extends CodeValue>(values: T[], word: string): T | null {
-  const exact = values.find((v) => v.name === word);
+function matchWord<T extends CodeValue>(values: T[], rawWord: string): T | null {
+  const squash = (s: string) => s.replace(/\s+/g, "");
+  const word = squash(rawWord);
+  const exact = values.find((v) => squash(v.name) === word);
   if (exact) return exact;
   const partial = values
-    .filter((v) => v.name.includes(word) || (v.name.length >= 2 && word.includes(v.name)))
+    .filter((v) => {
+      const name = squash(v.name);
+      return name.includes(word) || (name.length >= 2 && word.includes(name));
+    })
     .sort((a, b) => a.name.length - b.name.length);
   return partial[0] ?? null;
 }
@@ -190,6 +201,7 @@ export function selectCodes(
   hints: SelectionHints = {},
 ): Selection {
   const words = (hints.words ?? []).map((w) => w.trim()).filter(Boolean);
+  const topicWords = (hints.topicWords ?? []).map((w) => w.trim()).filter(Boolean);
   const used = new Set<string>();
   const guessed: string[] = [];
 
@@ -205,6 +217,10 @@ export function selectCodes(
         return match;
       }
     }
+    for (const word of topicWords) {
+      const match = matchWord(values, word);
+      if (match) return match;
+    }
     const total = fallbackTotal ? pickTotal(values) : null;
     if (total) return total;
     // 고를 근거가 없는데 선택지가 여럿이면 첫 번째 값을 임시로 쓰고 기록해 둔다.
@@ -219,9 +235,12 @@ export function selectCodes(
     value: pick(c.values, c.name, true),
   }));
 
+  // 원하는 수록주기가 있어도 질문의 끝 연도까지 자료가 없으면(예: 연도별은 작년까지) 가장 최근까지 있는 주기로 바꾼다.
   const wanted = hints.periodType;
+  const wantedInfo = meta.periods.find((p) => p.type === wanted);
+  const wantedEnd = Number.parseInt(wantedInfo?.end.slice(0, 4) ?? "", 10) || 0;
   const periodType =
-    wanted && meta.periods.some((p) => p.type === wanted)
+    wanted && wantedInfo && (!hints.toYear || wantedEnd >= hints.toYear)
       ? wanted
       : pickLatestPeriod(meta.periods);
   const periodCount = Math.min(
@@ -235,6 +254,8 @@ export function selectCodes(
     periodType,
     periodCount,
     periodEnd: meta.periods.find((p) => p.type === periodType)?.end ?? "",
+    fromYear: hints.fromYear ?? null,
+    toYear: hints.toYear ?? null,
     unmatchedWords: words.filter((w) => !used.has(w)),
     guessed,
   };
@@ -260,12 +281,31 @@ export function formatPeriod(type: PeriodType, raw: string): string {
   }
 }
 
+// 연도 범위를 수록주기에 맞는 KOSIS 시점 형식으로 바꾼다. (예: 분기 2024~2025 → 202401, 202504)
+// 연도 범위가 없거나 이 수록주기로 만들 수 없으면 null이다.
+function yearRange(selection: Selection): { start: string; end: string } | null {
+  const { fromYear, toYear, periodType } = selection;
+  if (fromYear === null && toYear === null) return null;
+  const endYear = Number.parseInt(selection.periodEnd.slice(0, 4), 10) || new Date().getFullYear();
+  const from = fromYear ?? (toYear as number) - MAX_PERIOD_COUNT + 1;
+  const to = toYear ?? Math.min(endYear, new Date().getFullYear());
+  const tails: Partial<Record<PeriodType, [string, string]>> = {
+    Y: ["", ""],
+    H: ["01", "02"],
+    Q: ["01", "04"],
+    M: ["01", "12"],
+  };
+  const tail = tails[periodType];
+  if (!tail) return null;
+  return { start: `${from}${tail[0]}`, end: `${to}${tail[1]}` };
+}
+
 // 고른 코드로 수치를 가져온다. 결과가 없으면 rows가 빈 배열이다.
 export async function fetchStatData(
   orgId: string,
   tblId: string,
   selection: Selection,
-): Promise<{ tableName: string; rows: StatRow[] }> {
+): Promise<{ tableName: string; rows: StatRow[]; truncated: boolean }> {
   // 수록 끝이 올해보다 뒤(추계 자료)면, 올해까지의 실제 자료를 얻으려고 그만큼 더 받은 뒤 걸러낸다.
   const thisYear = new Date().getFullYear();
   const endYear = Number.parseInt(selection.periodEnd.slice(0, 4), 10) || 0;
@@ -277,8 +317,15 @@ export async function fetchStatData(
     tblId,
     itmId: selection.item.id,
     prdSe: selection.periodType,
-    newEstPrdCnt: String(selection.periodCount + extra),
   };
+  const range = yearRange(selection);
+  if (range) {
+    // 질문이 연도 범위를 말했으면 그 기간을 가져온다.
+    params.startPrdDe = range.start;
+    params.endPrdDe = range.end;
+  } else {
+    params.newEstPrdCnt = String(selection.periodCount + extra);
+  }
   for (const c of selection.classes) {
     params[`objL${c.level}`] = c.value.id;
   }
@@ -286,7 +333,7 @@ export async function fetchStatData(
   const data = await kosisGet(DATA_URL, params);
   if (!Array.isArray(data)) {
     readKosisError(data);
-    return { tableName: "", rows: [] };
+    return { tableName: "", rows: [], truncated: false };
   }
 
   const raws = data as Record<string, string | undefined>[];
@@ -312,8 +359,15 @@ export async function fetchStatData(
 
   // 실제 자료가 있으면 추계 시점은 빼고 최근 개수만 남긴다. 전부 추계 자료면 그대로 둔다.
   const observed = rows.filter((r) => !r.isProjection);
-  const kept = (observed.length > 0 ? observed : rows).slice(-selection.periodCount);
-  return { tableName: raws[0]?.TBL_NM ?? "", rows: kept };
+  const usable = observed.length > 0 ? observed : rows;
+  // 연도 범위로 가져왔으면 최대 12개까지, 아니면 요청한 개수만 남긴다.
+  const limit = range ? MAX_PERIOD_COUNT : selection.periodCount;
+  const kept = usable.slice(-limit);
+  return {
+    tableName: raws[0]?.TBL_NM ?? "",
+    rows: kept,
+    truncated: kept.length < usable.length,
+  };
 }
 
 // 통계표 구조 조회 → 코드 고르기 → 수치 조회를 한 번에 한다.
@@ -324,6 +378,6 @@ export async function getTableData(
 ): Promise<TableData> {
   const meta = await getTableMeta(orgId, tblId);
   const selection = selectCodes(meta, hints);
-  const { tableName, rows } = await fetchStatData(orgId, tblId, selection);
-  return { tableName, selection, rows };
+  const { tableName, rows, truncated } = await fetchStatData(orgId, tblId, selection);
+  return { tableName, selection, rows, truncated };
 }
