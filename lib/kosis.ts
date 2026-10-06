@@ -3,7 +3,22 @@ import "server-only";
 import { getServerEnv } from "@/lib/env";
 
 const SEARCH_URL = "https://kosis.kr/openapi/statisticsSearch.do";
-const TIMEOUT_MS = 15_000;
+// 호출 하나의 제한 시간 (DESIGN.md 2번 "시간 제한": KOSIS 10초)
+const TIMEOUT_MS = 10_000;
+
+export type KosisErrorKind = "timeout" | "config" | "request" | "limit" | "server";
+
+// 화면에 그대로 보여줘도 되는 한국어 안내만 담은 KOSIS 오류 (키나 주소는 넣지 않는다)
+export class KosisError extends Error {
+  constructor(
+    public kind: KosisErrorKind,
+    message: string,
+    public retryable: boolean,
+  ) {
+    super(message);
+    this.name = "KosisError";
+  }
+}
 
 // KOSIS 통합검색 결과 중 이 앱에서 쓰는 통계표 정보
 export type KosisTable = {
@@ -47,6 +62,7 @@ function toKosisTable(raw: RawKosisTable): KosisTable {
 export async function kosisGet(
   url: string,
   params: Record<string, string>,
+  timeoutMs = TIMEOUT_MS,
 ): Promise<unknown> {
   const query = new URLSearchParams({
     ...params,
@@ -59,23 +75,47 @@ export async function kosisGet(
   try {
     res = await fetch(`${url}?${query}`, {
       cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch {
-    throw new Error("KOSIS에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  } catch (e) {
+    if (e instanceof Error && e.name === "TimeoutError") {
+      throw new KosisError("timeout", "KOSIS 응답이 늦어요. 잠시 후 다시 시도해 주세요.", true);
+    }
+    throw new KosisError("server", "KOSIS에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.", true);
   }
   if (!res.ok) {
-    throw new Error(`KOSIS 응답 오류입니다. (HTTP ${res.status})`);
+    throw new KosisError("server", `KOSIS가 응답하지 못했어요. 잠시 후 다시 시도해 주세요. (HTTP ${res.status})`, true);
   }
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    // JSON이 아닌 응답(점검 안내 페이지 등)
+    throw new KosisError("server", "KOSIS 응답을 읽지 못했어요. 잠시 후 다시 시도해 주세요.", true);
+  }
 }
 
 // 오류나 결과 없음은 배열이 아니라 {err, errMsg} 객체로 온다.
-// 결과 없음(코드 30)이면 null, 그 밖의 오류는 한국어 오류로 바꾼다.
+// 결과 없음(코드 30)이면 null, 그 밖의 오류는 사용자가 이해할 한국어 오류(KosisError)로 바꾼다.
+// KOSIS가 보낸 영어·내부 문구(errMsg)는 화면에 내보내지 않고, 코드만 서버 로그에서 확인할 수 있게 둔다.
 export function readKosisError(data: unknown): null {
   const { err, errMsg } = (data ?? {}) as { err?: string; errMsg?: string };
   if (err === "30") return null;
-  throw new Error(`KOSIS 오류: ${errMsg ?? "알 수 없는 오류"} (코드 ${err ?? "?"})`);
+  console.error("[kosis] 오류 응답:", err ?? "?", errMsg ?? "");
+
+  const code = Number(err);
+  if (code >= 10 && code <= 12) {
+    throw new KosisError("config", "KOSIS 연결 설정에 문제가 있어요. 관리자에게 알려 주세요.", false);
+  }
+  if (code === 20 || code === 21) {
+    throw new KosisError("request", "KOSIS가 이 요청을 처리하지 못했어요. 다른 통계표로 다시 시도해 주세요.", false);
+  }
+  if (code === 31) {
+    throw new KosisError("request", "조회할 자료가 너무 많아요. 기간이나 조건을 좁혀 질문해 주세요.", false);
+  }
+  if (code >= 40 && code <= 42) {
+    throw new KosisError("limit", "KOSIS 이용량이 많아요. 잠시 후 다시 시도해 주세요.", true);
+  }
+  throw new KosisError("server", "KOSIS에서 문제가 생겼어요. 잠시 후 다시 시도해 주세요.", true);
 }
 
 // 키워드로 KOSIS 통계표를 검색한다. 결과가 없으면 빈 배열을 돌려준다.

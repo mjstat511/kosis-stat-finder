@@ -1,6 +1,6 @@
 import "server-only";
 
-import { kosisGet, readKosisError } from "@/lib/kosis";
+import { KosisError, kosisGet, readKosisError } from "@/lib/kosis";
 
 const META_URL = "https://kosis.kr/openapi/statisticsData.do";
 const DATA_URL = "https://kosis.kr/openapi/Param/statisticsParameterData.do";
@@ -108,7 +108,7 @@ export async function getTableMeta(
 
   if (!Array.isArray(itmData)) {
     readKosisError(itmData);
-    throw new Error("통계표의 항목·분류 정보를 찾지 못했습니다.");
+    throw new KosisError("request", "이 통계표의 항목·분류 정보를 찾지 못했어요. 다른 통계표로 다시 시도해 주세요.", false);
   }
 
   const items: ItemValue[] = [];
@@ -131,7 +131,7 @@ export async function getTableMeta(
     levels.set(level, found);
   }
   if (items.length === 0) {
-    throw new Error("통계표에서 조회할 항목을 찾지 못했습니다.");
+    throw new KosisError("request", "이 통계표에서 조회할 항목을 찾지 못했어요. 다른 통계표로 다시 시도해 주세요.", false);
   }
 
   const periods: PeriodInfo[] = [];
