@@ -11,6 +11,12 @@ import {
 import { askJson } from "@/lib/openai";
 import type { AnswerDataRow, AnswerHints, AnswerSource } from "@/lib/schemas";
 
+// AI가 수치를 한두 자리 틀리게 옮기는 일이 가끔 있어, 서버 검사에 걸리면 문제를 알려 주고 다시 만들게 한다. (최대 3번)
+const MAX_ATTEMPTS = 3;
+
+// 문장에 반드시 있어야 하는 단위의 최대 길이. ("2020＝100"처럼 긴 설명형 단위는 요구하지 않는다)
+const MAX_REQUIRED_UNIT_LENGTH = 6;
+
 // 답변은 5문장 이내 (PRD 5번 must 2 규칙)
 export const MAX_SENTENCES = 5;
 
@@ -46,7 +52,8 @@ const SYSTEM_PROMPT = `너는 KOSIS 통계 수치를 바탕으로 사용자 질�
 
 규칙:
 - 아래 "자료"에 적힌 수치만 쓴다. 자료에 없는 수치를 추측하거나 지어내지 않는다.
-- 수치는 자료에 적힌 그대로 쓴다. 반올림하거나 단위를 바꾸지 않는다.
+- 수치 뒤에는 자료의 단위를 반드시 붙인다. 단위가 '100만달러'처럼 숫자로 시작해도 그대로 붙여 쓴다. (예: 919100만달러가 아니라 919(100만달러))
+- 수치는 자료에 적힌 글자 그대로 복사한다. 반올림하거나 자릿수를 바꾸거나 단위를 바꾸지 않는다. (예: 자료에 117.7이면 117.7이라고 쓰고 117.72나 118이라고 쓰지 않는다)
 - 답변은 ${MAX_SENTENCES}문장 이내로 쓴다. 핵심 수치와 간단한 해석만 쓴다.
 - 증감이나 증감률은 두 시점의 값으로만 계산하고, 반드시 calculations에 적는다. 그 밖의 계산은 하지 않는다.
 - 질문이 기간을 말했으면 그 기간의 자료를 빠뜨리지 않고 다룬다.
@@ -122,7 +129,7 @@ function extractClaimedNumbers(sentences: string[], rows: StatRow[], names: stri
     .replace(/\d{4}\s*년/g, " ")
     .replace(/\d{1,2}\s*월/g, " ")
     .replace(/\d\s*분기/g, " ")
-    .replace(/\d+\s*(개|번째|위)/g, " ");
+    .replace(/\d+\s*(개|번째|위|인|세|대)/g, " "); // 1인 가구, 65세, 20대 같은 이름·구분의 숫자
   const found = text.replace(/(\d),(?=\d{3})/g, "$1").match(/\d+(?:\.\d+)?/g) ?? [];
   return found.map(Number);
 }
@@ -143,6 +150,11 @@ function verify(
   if (ai.sentences.length === 0) problems.push("문장이 없습니다.");
   if (countSentences(ai.sentences) > MAX_SENTENCES) {
     problems.push(`문장이 ${MAX_SENTENCES}개를 넘습니다.`);
+  }
+
+  // 짧은 단위는 문장에 반드시 있어야 한다. (단위 없이 숫자만 쓰면 뜻이 달라질 수 있다)
+  if (unit && unit.length <= MAX_REQUIRED_UNIT_LENGTH && !ai.sentences.some((s) => s.includes(unit))) {
+    problems.push(`수치에 단위 "${unit}"를 붙이지 않았습니다.`);
   }
 
   // ㄹ. 전망·예측 표현
@@ -273,7 +285,8 @@ export async function buildAnswer(input: {
   if (table.truncated) notes.push("기간이 넓어 최근 일부 시점만 가져왔다.");
 
   const dataLines = rows.map(
-    (r) => `${r.periodLabel} | ${r.value}${r.unit}${r.isProjection ? " [추계]" : ""}`,
+    (r) =>
+      `${r.periodLabel} | ${r.value}${r.unit ? ` (단위: ${r.unit})` : ""}${r.isProjection ? " [추계]" : ""}`,
   );
   // "2020년 이후"나 "최근 6개월"처럼 범위를 분명히 말했고 시점이 많지 않으면, 모든 시점을 다루게 한다.
   const h = input.hints;
@@ -295,7 +308,7 @@ export async function buildAnswer(input: {
 
   // ④⑤ 답변 작성과 서버 검사. 실패하면 문제를 알려 주고 한 번만 다시 만들게 한다.
   let feedback = "";
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const ai = await askJson({
       system: SYSTEM_PROMPT,
       user: feedback ? `${baseUser}\n\n이전 답변의 문제:\n${feedback}\n문제를 고쳐 다시 답하세요.` : baseUser,

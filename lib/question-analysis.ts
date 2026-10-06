@@ -8,6 +8,9 @@ import { MAX_PERIOD_COUNT, type SelectionHints } from "@/lib/kosis-data";
 // 질문 길이 제한 (PRD 7번 비용 보호, 화면의 200자와 같다)
 export const QUESTION_MAX_LENGTH = 200;
 
+// 나라 전체를 뜻하는 말은 통계표에서 고를 "지역"이 아니라 기본값(전국·합계)이므로 지역에서 뺀다.
+const NATIONAL_WORDS = ["전국", "한국", "대한민국", "우리나라", "국내", "나라 전체"];
+
 // 후보 선별 단계에 넘기는 대체 키워드의 최대 개수
 const MAX_ALT_KEYWORDS = 3;
 const MAX_KEYWORDS = 3;
@@ -117,8 +120,8 @@ export async function analyzeQuestion(input: AnalyzeInput): Promise<QuestionAnal
     ...raw,
     keywords,
     searchQuery: raw.searchQuery.trim() || keywords.join(" "),
-    regions: clean(raw.regions),
-    filterWords: clean(raw.filterWords),
+    regions: clean(raw.regions).filter((r) => !NATIONAL_WORDS.includes(r)),
+    filterWords: clean(raw.filterWords).filter((w) => !NATIONAL_WORDS.includes(w)),
     fromYear,
     toYear,
     recentCount:
