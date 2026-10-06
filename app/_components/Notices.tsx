@@ -16,10 +16,12 @@ export function LoadingNotice({ message }: { message: string }) {
 export function ErrorNotice({
   message,
   kosisUrl,
+  retryable = true,
   onRetry,
 }: {
   message: string;
   kosisUrl: string;
+  retryable?: boolean;
   onRetry: () => void;
 }) {
   return (
@@ -29,13 +31,15 @@ export function ErrorNotice({
     >
       <p className="font-medium text-red-800 dark:text-red-300">{message}</p>
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onRetry}
-          className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
-        >
-          다시 시도
-        </button>
+        {retryable && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
+          >
+            다시 시도
+          </button>
+        )}
         <a
           href={kosisUrl}
           target="_blank"
@@ -78,42 +82,45 @@ export function ClarifyNotice({
 
 // 후보 없음: "찾지 못했어요"와 대체 키워드 제안
 export function NotFoundNotice({
+  message,
   keywords,
   onPick,
 }: {
+  message: string;
   keywords: string[];
   onPick: (keyword: string) => void;
 }) {
   return (
     <section className={boxClass}>
-      <p className="font-medium">관련 통계표를 찾지 못했어요.</p>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        이런 키워드로 다시 찾아볼까요?
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {keywords.map((keyword) => (
-          <button
-            key={keyword}
-            type="button"
-            onClick={() => onPick(keyword)}
-            className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-          >
-            {keyword}
-          </button>
-        ))}
-      </div>
+      <p className="font-medium">{message}</p>
+      {keywords.length > 0 && (
+        <>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            이런 키워드로 다시 찾아볼까요?
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {keywords.map((keyword) => (
+              <button
+                key={keyword}
+                type="button"
+                onClick={() => onPick(keyword)}
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              >
+                {keyword}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
 // 예측·전망 요청 거절 안내
-export function RefusedNotice() {
+export function RefusedNotice({ message }: { message: string }) {
   return (
     <section className={boxClass}>
-      <p className="font-medium">예측은 도와드리지 않아요.</p>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        지금까지 발표된 통계를 바탕으로 한 질문을 해 주세요.
-      </p>
+      <p className="font-medium">{message}</p>
     </section>
   );
 }
