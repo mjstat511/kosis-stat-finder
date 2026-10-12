@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 통계표 찾기
 
-## Getting Started
+> 별처럼 흩어진 KOSIS 통계표에서 답을 찾아 드려요.
 
-First, run the development server:
+궁금한 통계를 키워드나 질문으로 입력하면, 국가통계포털(KOSIS)에서 관련 통계표를 찾아 보여주고 선택한 통계표의 수치로 출처가 붙은 답변을 해 주는 웹 앱입니다.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+보고서를 쓰는 직장인, 과제를 하는 학생, 기사를 쓰는 기자처럼 **근거가 되는 통계 수치가 필요하지만 KOSIS에서 알맞은 통계표를 찾기 어려운 사람**을 위해 만들었습니다.
+
+## 어떻게 동작하나요
+
+```
+질문 입력 → AI가 질문 분석 → KOSIS에서 통계표 검색 → 관련 통계표 후보 3개 이하(이유 포함)
+        → 1순위 표의 수치 조회 → 조회한 값만으로 답변 작성 → 출처·기준 시점과 함께 표시
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- 후보는 **최대 3개**이고, 1순위가 자동으로 선택됩니다. 다른 후보로 바꿔 볼 수 있습니다.
+- 질문이 너무 넓으면("물가") 한 번 되묻고, 후속 질문("그럼 부산은?")은 직전 질문 한 개를 이어서 이해합니다.
+- 예측·전망을 묻는 질문("내년 출산율은?")은 거절합니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## AI가 지키는 규칙 (서버가 직접 검사합니다)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+AI의 답을 그대로 믿지 않고, 서버가 아래를 한 번 더 확인합니다.
 
-## Learn More
+- 수치는 **KOSIS에서 조회한 값만** 쓰고, 지어내거나 추측하지 않습니다. (조회값과 글자 그대로 같은지 확인)
+- 증감·증감률 같은 **단순 계산만** 허용하며, 서버가 다시 계산해 맞는지 확인하고 계산식을 함께 보여줍니다.
+- 모든 답변에 **출처 통계표 이름, 기준 시점, KOSIS 원본 링크**를 서버가 붙입니다.
+- 답변은 5문장 이내이고, 전망·예측 표현은 막습니다.
+- 검색 결과에 없는 통계표는 후보로 만들지 않습니다.
 
-To learn more about Next.js, take a look at the following resources:
+## 사용한 기술
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [Next.js](https://nextjs.org/) 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4
+- [KOSIS 공유서비스(OpenAPI)](https://kosis.kr/openapi/index/index.jsp): 통계표 검색과 수치 조회
+- [OpenAI API](https://platform.openai.com/): 질문 분석, 후보 선별, 답변 작성
+- [zod](https://zod.dev/): 요청과 AI 답변의 모양 검사
+- 배포: [Vercel](https://vercel.com/)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 직접 실행해 보기
 
-## Deploy on Vercel
+1. 저장소를 내려받고 패키지를 설치합니다.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   ```bash
+   npm install
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2. 프로젝트 폴더에 `.env` 파일을 만들고 아래 두 값을 넣습니다. (이 파일은 `.gitignore`에 등록되어 있어 저장소에 올라가지 않습니다.)
+
+   ```
+   KOSIS_API_KEY=KOSIS 공유서비스에서 발급받은 인증키
+   OPENAI_API_KEY=OpenAI에서 발급받은 API 키
+   ```
+
+   - KOSIS 인증키 발급: <https://kosis.kr/openapi/index/index.jsp>
+   - 키는 서버 코드에서만 읽으며, 브라우저로 내려가지 않습니다.
+
+3. 개발 서버를 켭니다.
+
+   ```bash
+   npm run dev
+   ```
+
+   브라우저에서 <http://localhost:3000> 을 엽니다.
+
+기타 명령어: `npm run build`(배포용 빌드), `npm run lint`(코드 검사)
+
+## 폴더 구성
+
+```
+app/            화면(page.tsx, _components/)과 API 경로(api/search, api/answer)
+lib/            KOSIS·OpenAI 호출, 질문 분석, 후보 선별, 답변 작성과 검사
+docs/           테스트 질문 20개와 측정 결과
+scripts/        테스트 질문을 실제 앱에 던져 측정하는 스크립트
+PRD.md          기획서
+PLAN.md         개발 계획
+DESIGN.md       설계서
+```
+
+## 테스트 결과
+
+테스트 질문 20개로 측정했습니다. (자세한 내용은 [docs/test-results.md](docs/test-results.md))
+
+| 기준 | 목표 | 결과 |
+|---|---|---|
+| 첫 3개 후보 안에 맞는 통계표 | 16개(80%) 이상 | 18개(90%) |
+| 질문 입력부터 후보 표시까지 | 1분 이내 | 20개 모두, 평균 약 5초 |
+| 답변 수치와 KOSIS 원본 일치 | 100% | 직접 대조한 2건은 모두 일치 (나머지는 확인 중) |
+
+## 알아둘 점
+
+- 질문과 답변은 서버에 저장하지 않습니다. 다만 질문은 AI(OpenAI)로 전송되므로 **이름·연락처 같은 개인정보는 입력하지 마세요.**
+- AI의 판단 때문에 같은 질문도 결과가 조금씩 달라질 수 있습니다.
+- 통계표 이름이 KOSIS와 다른 말(예: "취업률" ↔ "고용률")은 못 찾을 수 있으며, 이때는 비슷한 키워드를 제안합니다.
+- 통계 자료의 저작권과 이용 조건은 [KOSIS](https://kosis.kr)를 따릅니다.

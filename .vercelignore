@@ -1,0 +1,5 @@
+# Vercel 배포 때 올리지 않을 것 (git에 없는 개인 작업 폴더와 비밀 파일)
+.claude
+.bkit
+trash-can
+.env*
