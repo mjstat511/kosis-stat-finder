@@ -1,5 +1,6 @@
 import "server-only";
 
+import { callTimeout } from "@/lib/deadline";
 import { getServerEnv } from "@/lib/env";
 
 const SEARCH_URL = "https://kosis.kr/openapi/statisticsSearch.do";
@@ -71,11 +72,14 @@ export async function kosisGet(
     jsonVD: "Y",
   });
 
+  // 요청 전체의 남은 시간을 넘지 않는 제한 시간 (마감이 가까우면 여기서 DeadlineError)
+  const timeout = callTimeout(timeoutMs);
+
   let res: Response;
   try {
     res = await fetch(`${url}?${query}`, {
       cache: "no-store",
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(timeout),
     });
   } catch (e) {
     if (e instanceof Error && e.name === "TimeoutError") {

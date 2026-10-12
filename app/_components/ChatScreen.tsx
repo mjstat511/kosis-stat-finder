@@ -37,7 +37,18 @@ async function postJson<T>(
       body: JSON.stringify(body),
       signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
     });
-    return (await res.json()) as T;
+    // 서버가 도중에 끊기거나 플랫폼 오류 페이지가 오면 JSON이 아니다. 연결 문제와 구분해서 안내한다.
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      return clientError("서버가 응답을 마치지 못했어요. 잠시 후 다시 시도해 주세요.");
+    }
+    const status = (data as { status?: unknown } | null)?.status;
+    if (typeof status !== "string") {
+      return clientError("서버 응답을 이해하지 못했어요. 잠시 후 다시 시도해 주세요.");
+    }
+    return data as T;
   } catch (e) {
     if (signal.aborted) return null; // 새 질문 때문에 취소됨
     if (e instanceof Error && e.name === "TimeoutError") {

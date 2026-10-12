@@ -8,6 +8,12 @@ import { MAX_PERIOD_COUNT, type SelectionHints } from "@/lib/kosis-data";
 // 질문 길이 제한 (PRD 7번 비용 보호, 화면의 200자와 같다)
 export const QUESTION_MAX_LENGTH = 200;
 
+// 후보 응답에 담아 보내는 질문 정보(hints)의 한도. 답변 요청의 검사 기준(lib/schemas.ts)과 같은 값을 쓴다.
+export const HINT_WORD_MAX_LENGTH = 40;
+export const HINT_KEYWORDS_MAX = 5;
+export const HINT_REGIONS_MAX = 5;
+export const HINT_FILTER_WORDS_MAX = 8;
+
 // 나라 전체를 뜻하는 말은 통계표에서 고를 "지역"이 아니라 기본값(전국·합계)이므로 지역에서 뺀다.
 const NATIONAL_WORDS = ["전국", "한국", "대한민국", "우리나라", "국내", "나라 전체"];
 
@@ -142,7 +148,12 @@ export async function analyzeQuestion(input: AnalyzeInput): Promise<QuestionAnal
         ? Math.min(raw.recentCount, MAX_PERIOD_COUNT)
         : null,
     altKeywords: clean(raw.altKeywords).slice(0, MAX_ALT_KEYWORDS),
-    contextualQuestion: raw.contextualQuestion.trim() || question,
+    // 맥락을 합친 질문이 너무 길면 쓸 수 없으므로(답변 요청은 200자까지) 사용자가 입력한 질문을 그대로 쓴다.
+    contextualQuestion:
+      raw.contextualQuestion.trim() &&
+      raw.contextualQuestion.trim().length <= QUESTION_MAX_LENGTH
+        ? raw.contextualQuestion.trim()
+        : question,
   };
 }
 
@@ -160,10 +171,14 @@ export function toSelectionHints(analysis: QuestionAnalysis): SelectionHints {
 
 // 후보 응답에 담아 보냈다가 답변 요청에서 돌려받는 질문 정보
 export function toAnswerHints(analysis: QuestionAnalysis) {
+  // AI가 준 값이 답변 요청의 검사 기준(개수·글자 수)을 넘으면 후보는 보이는데 답이 안 나오는 막다른 상태가 된다.
+  // 그래서 보내기 전에 기준 안으로 줄인다. (너무 긴 단어는 빼고, 개수는 앞에서부터 자른다)
+  const fit = (words: string[], max: number) =>
+    words.filter((w) => w.length <= HINT_WORD_MAX_LENGTH).slice(0, max);
   return {
-    keywords: analysis.keywords,
-    regions: analysis.regions,
-    filterWords: analysis.filterWords,
+    keywords: fit(analysis.keywords, HINT_KEYWORDS_MAX),
+    regions: fit(analysis.regions, HINT_REGIONS_MAX),
+    filterWords: fit(analysis.filterWords, HINT_FILTER_WORDS_MAX),
     periodType: analysis.periodType,
     recentCount: analysis.recentCount,
     fromYear: analysis.fromYear,

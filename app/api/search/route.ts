@@ -1,12 +1,23 @@
 import { selectCandidates } from "@/lib/candidates";
+import { runWithDeadline } from "@/lib/deadline";
 import { searchKosisTables } from "@/lib/kosis";
+import { checkRateLimit, clientKey, limitResponse } from "@/lib/rate-limit";
 import { AiCallError } from "@/lib/openai";
 import { errorBody, toErrorResponse } from "@/lib/api-error";
 import { analyzeQuestion, toAnswerHints } from "@/lib/question-analysis";
-import { SearchRequestSchema, type SearchResponse } from "@/lib/schemas";
+import { SearchRequestSchema, type SearchRequest, type SearchResponse } from "@/lib/schemas";
 
 // 후보 찾기 API (DESIGN.md 흐름 A). 배포 때 Vercel 요금제 한도를 확인해 값을 조정한다.
 export const maxDuration = 60;
+
+// 요청 하나가 쓸 수 있는 전체 시간. 플랫폼이 함수를 강제로 끊기 전에 우리가 먼저 "지연" 오류로 끝낸다.
+const REQUEST_BUDGET_MS = 55_000;
+
+// 같은 사용자(IP)의 호출 횟수 제한. 검색 한 번에 AI를 여러 번 부르므로 답변보다 엄격하다. (비용 보호)
+const RATE_RULES = [
+  { name: "search-min", windowMs: 60_000, max: 20 },
+  { name: "search-hour", windowMs: 3_600_000, max: 150 },
+];
 
 const SEARCH_RESULT_COUNT = 10;
 
@@ -20,9 +31,16 @@ export async function POST(req: Request): Promise<Response> {
     return badRequest("요청 형식이 올바르지 않아요.");
   }
 
+  const limit = checkRateLimit(clientKey(req), RATE_RULES);
+  if (!limit.ok) return limitResponse(limit.retryAfterSec);
+
+  return runWithDeadline(REQUEST_BUDGET_MS, () => handle(parsed.data));
+}
+
+async function handle(data: SearchRequest): Promise<Response> {
   try {
     // ② 질문 분석 (비었거나 200자를 넘으면 여기서 한국어 안내로 거절된다)
-    const analysis = await analyzeQuestion(parsed.data).catch((e: unknown) => {
+    const analysis = await analyzeQuestion(data).catch((e: unknown) => {
       if (e instanceof Error && !(e instanceof AiCallError) && /^질문/.test(e.message)) {
         return e; // 입력 문제는 400으로 돌려보낸다
       }
@@ -50,7 +68,7 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     // ④ KOSIS 통합검색 → ⑥⑦ 후보 선별과 서버 검사
-    const alreadyClarified = Boolean(parsed.data.clarification); // 이미 되물은 뒤면 다시 되묻지 않는다
+    const alreadyClarified = Boolean(data.clarification); // 이미 되물은 뒤면 다시 되묻지 않는다
     let tables = await searchKosisTables(analysis.searchQuery, SEARCH_RESULT_COUNT);
     let { candidates, clarify } = await selectCandidates(analysis, tables, alreadyClarified);
 

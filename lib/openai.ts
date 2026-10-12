@@ -4,7 +4,8 @@ import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { z } from "zod";
 
-import { getServerEnv } from "@/lib/env";
+import { callTimeout, DeadlineError } from "@/lib/deadline";
+import { ConfigError, getServerEnv } from "@/lib/env";
 
 // 사용할 모델: 질문 분석·후보 선별·답변 작성은 짧은 구조화 작업이라 작고 빠른 모델이면 충분하다.
 // 품질이 모자라면 이 한 줄만 바꾼다.
@@ -42,6 +43,11 @@ function getClient(): OpenAI {
 
 function toAiCallError(e: unknown): AiCallError {
   if (e instanceof AiCallError) return e;
+  if (e instanceof DeadlineError) return new AiCallError("timeout", e.message, true);
+  // 키가 없는 것도 "AI 연결 설정 문제"로 안내한다. (다시 시도해도 소용없다)
+  if (e instanceof ConfigError) {
+    return new AiCallError("auth", "AI 연결 설정에 문제가 있어요. 관리자에게 알려 주세요.", false);
+  }
   if (e instanceof OpenAI.APIConnectionTimeoutError) {
     return new AiCallError("timeout", "AI 응답이 늦어요. 잠시 후 다시 시도해 주세요.", true);
   }
@@ -71,17 +77,21 @@ export async function askJson<S extends z.ZodType>(
   options: AskOptions<S>,
 ): Promise<z.infer<S>> {
   try {
-    const res = await getClient().responses.parse({
-      model: OPENAI_MODEL,
-      input: [
-        { role: "system", content: options.system },
-        { role: "user", content: options.user },
-      ],
-      text: { format: zodTextFormat(options.schema, options.name) },
-      max_output_tokens: options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-      reasoning: { effort: "low" },
-      store: false,
-    });
+    const res = await getClient().responses.parse(
+      {
+        model: OPENAI_MODEL,
+        input: [
+          { role: "system", content: options.system },
+          { role: "user", content: options.user },
+        ],
+        text: { format: zodTextFormat(options.schema, options.name) },
+        max_output_tokens: options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+        reasoning: { effort: "low" },
+        store: false,
+      },
+      // 요청 전체의 남은 시간을 넘지 않도록 호출마다 제한 시간을 정한다. (마감이 가까우면 DeadlineError)
+      { timeout: callTimeout(TIMEOUT_MS) },
+    );
 
     if (res.output_parsed == null) {
       throw new AiCallError("format", "AI 답변 형식이 올바르지 않아요. 다시 시도해 주세요.", true);
