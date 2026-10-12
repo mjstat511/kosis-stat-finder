@@ -1,13 +1,19 @@
 import { z } from "zod";
 
-import { QUESTION_MAX_LENGTH } from "@/lib/question-analysis";
+import {
+  HINT_FILTER_WORDS_MAX,
+  HINT_KEYWORDS_MAX,
+  HINT_REGIONS_MAX,
+  HINT_WORD_MAX_LENGTH,
+  QUESTION_MAX_LENGTH,
+} from "@/lib/question-analysis";
 
 // 후보 찾기에서 뽑아 둔 질문 정보. 후보 응답에 담겨 나갔다가 답변 요청에 그대로 돌아온다.
 // (답변 단계에서 질문을 다시 분석하지 않아 AI 호출과 시간을 아낀다. 값이 바뀌어도 코드 고르기에만 영향을 준다.)
 export const AnswerHintsSchema = z.object({
-  keywords: z.array(z.string().max(40)).max(5),
-  regions: z.array(z.string().max(40)).max(5),
-  filterWords: z.array(z.string().max(40)).max(8),
+  keywords: z.array(z.string().max(HINT_WORD_MAX_LENGTH)).max(HINT_KEYWORDS_MAX),
+  regions: z.array(z.string().max(HINT_WORD_MAX_LENGTH)).max(HINT_REGIONS_MAX),
+  filterWords: z.array(z.string().max(HINT_WORD_MAX_LENGTH)).max(HINT_FILTER_WORDS_MAX),
   periodType: z.enum(["Y", "H", "Q", "M"]).nullable(),
   recentCount: z.number().int().min(1).max(12).nullable(),
   fromYear: z.number().int().min(1900).max(2200).nullable(),
@@ -18,7 +24,7 @@ export type AnswerHints = z.infer<typeof AnswerHintsSchema>;
 
 // 답변 요청 (DESIGN.md 흐름 B 입력)
 export const AnswerRequestSchema = z.object({
-  question: z.string().max(QUESTION_MAX_LENGTH * 2), // 맥락을 합친 질문
+  question: z.string().max(QUESTION_MAX_LENGTH), // 맥락을 합친 질문 (분석 단계에서 이미 200자 안으로 맞춘다)
   orgId: z.string().regex(/^[A-Za-z0-9_]{1,20}$/),
   tblId: z.string().regex(/^[A-Za-z0-9_]{1,40}$/),
   hints: AnswerHintsSchema,

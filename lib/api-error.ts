@@ -1,5 +1,7 @@
 import "server-only";
 
+import { DeadlineError } from "@/lib/deadline";
+import { ConfigError } from "@/lib/env";
 import { KosisError } from "@/lib/kosis";
 import { AiCallError } from "@/lib/openai";
 
@@ -20,6 +22,14 @@ export function errorBody(message: string, retryable: boolean): ErrorBody {
 // 보여줘도 되는 것: AI 호출 오류와 KOSIS 오류(둘 다 우리가 만든 한국어 안내만 담는다). 그 밖은 일반 문구로 바꾼다.
 // 시간 초과(지연)는 504, 그 밖의 외부 서비스 문제는 502로 돌려준다.
 export function toErrorResponse(e: unknown, tag: string): Response {
+  // 설정(키) 문제: 관리자에게 알리라는 안내, 다시 시도해도 소용없음
+  if (e instanceof ConfigError) {
+    return Response.json(errorBody(e.message, false), { status: 502 });
+  }
+  // 요청 전체의 마감이 다 됐을 때: 지연으로 안내
+  if (e instanceof DeadlineError) {
+    return Response.json(errorBody(e.message, true), { status: 504 });
+  }
   if (e instanceof AiCallError || e instanceof KosisError) {
     const status = e.kind === "timeout" ? 504 : 502;
     return Response.json(errorBody(e.message, e.retryable), { status });
