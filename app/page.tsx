@@ -8,8 +8,8 @@ export default function Home() {
         <span aria-hidden="true" className="text-sm tracking-[0.6em] text-[var(--nebula-violet)]">
           ✦ ✧ ✦
         </span>
-        <h1 className="title-glow text-5xl font-bold tracking-[0.12em] sm:text-6xl">통계찾기</h1>
-        <p className="text-[var(--space-dim)]">별처럼 흩어진 KOSIS 통계에서 답을 찾아 드려요</p>
+        <h1 className="title-glow text-5xl font-bold tracking-[0.12em] sm:text-6xl">통계표 찾기</h1>
+        <p className="text-[var(--space-dim)]">별처럼 흩어진 KOSIS 통계표에서 답을 찾아 드려요</p>
       </header>
       <ChatScreen />
     </main>
