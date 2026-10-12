@@ -1,13 +1,13 @@
 import type { Clarify } from "./types";
 
 const boxClass =
-  "flex flex-col gap-3 rounded-lg border p-4 border-zinc-200 dark:border-zinc-800";
+  "space-card flex flex-col gap-3 p-5";
 
 // ③ 진행 상태: 지금 어느 단계인지 한 줄
 export function LoadingNotice({ message }: { message: string }) {
   return (
-    <p role="status" className="text-zinc-600 dark:text-zinc-400">
-      {message}
+    <p role="status" className="animate-pulse text-center text-[var(--nebula-cyan)]">
+      ✦ {message}
     </p>
   );
 }
@@ -27,15 +27,15 @@ export function ErrorNotice({
   return (
     <section
       role="alert"
-      className={`${boxClass} border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/40`}
+      className={`${boxClass} !border-[rgba(255,120,150,0.5)] !bg-[rgba(70,10,30,0.5)]`}
     >
-      <p className="font-medium text-red-800 dark:text-red-300">{message}</p>
+      <p className="font-medium text-[#ffb3c6]">{message}</p>
       <div className="flex gap-2">
         {retryable && (
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
+            className="rounded-lg bg-[#d6336c] px-4 py-2 text-sm font-medium text-white hover:bg-[#e8467f]"
           >
             다시 시도
           </button>
@@ -44,7 +44,7 @@ export function ErrorNotice({
           href={kosisUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="rounded-md border border-zinc-300 px-4 py-2 text-sm hover:bg-white dark:border-zinc-700 dark:hover:bg-zinc-900"
+          className="btn-ghost rounded-lg px-4 py-2 text-sm"
         >
           KOSIS 바로가기
         </a>
@@ -70,7 +70,7 @@ export function ClarifyNotice({
             key={option}
             type="button"
             onClick={() => onPick(option)}
-            className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="btn-ghost rounded-full px-4 py-2 text-sm"
           >
             {option}
           </button>
@@ -95,7 +95,7 @@ export function NotFoundNotice({
       <p className="font-medium">{message}</p>
       {keywords.length > 0 && (
         <>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="text-sm text-[var(--space-dim)]">
             이런 키워드로 다시 찾아볼까요?
           </p>
           <div className="flex flex-wrap gap-2">
@@ -104,7 +104,7 @@ export function NotFoundNotice({
                 key={keyword}
                 type="button"
                 onClick={() => onPick(keyword)}
-                className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                className="btn-ghost rounded-full px-4 py-2 text-sm"
               >
                 {keyword}
               </button>

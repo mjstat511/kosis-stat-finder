@@ -22,20 +22,20 @@ export default function QuestionForm({
 
   return (
     <form
-      className="flex flex-col gap-2"
+      className="flex flex-col gap-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (canSubmit) onSubmit(trimmed);
       }}
     >
       {previousQuestion && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-[var(--space-faint)]">
           직전 질문: {previousQuestion}
         </p>
       )}
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <input
-          className="h-12 w-full rounded-lg sm:w-auto sm:flex-1 border border-zinc-300 bg-white px-4 text-base text-black outline-none focus:border-blue-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className="space-input h-14 w-full px-5 text-base sm:w-auto sm:flex-1"
           type="text"
           value={text}
           maxLength={MAX_LENGTH}
@@ -43,15 +43,11 @@ export default function QuestionForm({
           aria-label="질문 입력"
           onChange={(e) => setText(e.target.value)}
         />
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="h-12 rounded-lg bg-blue-600 px-6 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <button type="submit" disabled={!canSubmit} className="btn-primary h-14 px-8">
           검색
         </button>
       </div>
-      <div className="flex items-start justify-between gap-4 text-sm text-zinc-500 dark:text-zinc-400">
+      <div className="flex items-start justify-between gap-4 text-sm text-[var(--space-faint)]">
         <p>이름·연락처 같은 개인정보는 입력하지 마세요. (질문은 AI로 전송됩니다)</p>
         <p className="shrink-0">
           {text.length} / {MAX_LENGTH}자

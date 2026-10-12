@@ -1,8 +1,18 @@
 @import "tailwindcss";
 
+/* ───────── 우주 테마: 검은 밤하늘, 별, 성운 ───────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --space-black: #04020d;
+  --space-ink: #ece8ff; /* 본문 글자: 살짝 보랏빛이 도는 흰색 */
+  --space-dim: #a9a3cf; /* 보조 글자 */
+  --space-faint: #7d77a8; /* 아주 흐린 글자 */
+  --nebula-violet: #8b7bff;
+  --nebula-cyan: #5ee7ff;
+  --nebula-pink: #ff8ad8;
+  --card-bg: rgba(18, 12, 44, 0.55);
+  --card-border: rgba(150, 130, 255, 0.28);
+  --background: var(--space-black);
+  --foreground: var(--space-ink);
 }
 
 @theme inline {
@@ -12,15 +22,266 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
+  background: var(--space-black);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* 배경색은 html이 담당한다. body가 배경을 칠하면 뒤쪽의 별과 성운(z-index가 음수)을 덮어 버린다. */
+  background: transparent;
+  color: var(--space-ink);
+  font-family: var(--font-geist-sans), "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  position: relative;
+}
+
+/* 성운: 화면 뒤에 번지는 보라·청록·분홍 빛 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 15% 8%, rgba(98, 70, 230, 0.34), transparent 70%),
+    radial-gradient(50% 40% at 88% 22%, rgba(30, 170, 230, 0.2), transparent 70%),
+    radial-gradient(70% 50% at 55% 108%, rgba(190, 70, 210, 0.26), transparent 70%),
+    radial-gradient(40% 30% at 5% 85%, rgba(60, 90, 220, 0.2), transparent 70%);
+}
+
+/* 별: 크기가 다른 세 겹을 겹쳐서 깊이를 준다. 가장 앞의 별은 천천히 깜빡인다. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.3px 1.3px at 394px 241px, rgba(255,255,255,0.75), transparent),
+    radial-gradient(1.5px 1.5px at 243px 17px, rgba(200,245,255,0.75), transparent),
+    radial-gradient(1.3px 1.3px at 293px 9px, rgba(200,245,255,0.81), transparent),
+    radial-gradient(1.8px 1.8px at 584px 331px, rgba(200,245,255,0.99), transparent),
+    radial-gradient(1.7px 1.7px at 60px 472px, rgba(200,245,255,0.82), transparent),
+    radial-gradient(1.3px 1.3px at 413px 408px, rgba(255,225,250,0.72), transparent),
+    radial-gradient(1.5px 1.5px at 73px 218px, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1.2px 1.2px at 58px 109px, rgba(255,255,255,0.86), transparent),
+    radial-gradient(1.2px 1.2px at 377px 633px, rgba(255,255,255,0.88), transparent),
+    radial-gradient(1.8px 1.8px at 157px 263px, rgba(200,245,255,0.81), transparent),
+    radial-gradient(1.7px 1.7px at 130px 123px, rgba(255,225,250,0.84), transparent),
+    radial-gradient(1.3px 1.3px at 324px 92px, rgba(210,220,255,0.92), transparent),
+    radial-gradient(1.5px 1.5px at 495px 170px, rgba(255,255,255,0.99), transparent),
+    radial-gradient(1.3px 1.3px at 545px 375px, rgba(200,245,255,0.97), transparent);
+  background-size: 640px 640px;
+  animation: twinkle 7s ease-in-out infinite alternate;
+}
+
+.stars-far,
+.stars-near {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.stars-far {
+  background-image:
+    radial-gradient(0.8px 0.8px at 170px 490px, rgba(255,255,255,0.53), transparent),
+    radial-gradient(0.8px 0.8px at 279px 53px, rgba(255,255,255,0.86), transparent),
+    radial-gradient(0.7px 0.7px at 114px 24px, rgba(255,225,250,0.53), transparent),
+    radial-gradient(0.9px 0.9px at 51px 287px, rgba(200,245,255,0.55), transparent),
+    radial-gradient(1.0px 1.0px at 119px 327px, rgba(255,255,255,0.73), transparent),
+    radial-gradient(1.1px 1.1px at 208px 30px, rgba(255,255,255,0.72), transparent),
+    radial-gradient(0.9px 0.9px at 73px 153px, rgba(200,245,255,0.55), transparent),
+    radial-gradient(1.0px 1.0px at 162px 291px, rgba(255,255,255,0.54), transparent),
+    radial-gradient(0.8px 0.8px at 297px 332px, rgba(255,255,255,0.72), transparent),
+    radial-gradient(0.7px 0.7px at 37px 293px, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1.0px 1.0px at 277px 223px, rgba(255,225,250,0.73), transparent),
+    radial-gradient(0.8px 0.8px at 237px 190px, rgba(255,255,255,0.78), transparent),
+    radial-gradient(0.9px 0.9px at 129px 46px, rgba(200,245,255,0.7), transparent),
+    radial-gradient(0.9px 0.9px at 180px 378px, rgba(200,245,255,0.89), transparent),
+    radial-gradient(0.9px 0.9px at 65px 267px, rgba(210,220,255,0.56), transparent),
+    radial-gradient(0.7px 0.7px at 255px 220px, rgba(255,255,255,0.81), transparent),
+    radial-gradient(1.1px 1.1px at 298px 409px, rgba(210,220,255,0.64), transparent),
+    radial-gradient(0.9px 0.9px at 184px 309px, rgba(255,225,250,0.53), transparent),
+    radial-gradient(0.8px 0.8px at 52px 488px, rgba(255,255,255,0.52), transparent),
+    radial-gradient(1.0px 1.0px at 364px 163px, rgba(255,225,250,0.61), transparent),
+    radial-gradient(1.0px 1.0px at 202px 459px, rgba(255,255,255,0.88), transparent),
+    radial-gradient(0.9px 0.9px at 186px 91px, rgba(255,225,250,0.52), transparent),
+    radial-gradient(0.8px 0.8px at 398px 152px, rgba(255,255,255,0.66), transparent),
+    radial-gradient(0.9px 0.9px at 474px 451px, rgba(255,255,255,0.68), transparent),
+    radial-gradient(1.1px 1.1px at 286px 147px, rgba(255,225,250,0.85), transparent),
+    radial-gradient(0.9px 0.9px at 147px 366px, rgba(210,220,255,0.77), transparent);
+  background-size: 520px 520px;
+  opacity: 0.8;
+}
+
+.stars-near {
+  background-image:
+    radial-gradient(2.6px 2.6px at 545px 310px, rgba(255,255,255,0.97), transparent),
+    radial-gradient(2.2px 2.2px at 272px 535px, rgba(255,255,255,0.94), transparent),
+    radial-gradient(2.3px 2.3px at 233px 550px, rgba(200,246,255,0.93), transparent),
+    radial-gradient(2.5px 2.5px at 233px 632px, rgba(255,255,255,0.98), transparent),
+    radial-gradient(2.1px 2.1px at 415px 237px, rgba(217,204,255,0.94), transparent),
+    radial-gradient(2.5px 2.5px at 34px 33px, rgba(217,204,255,0.93), transparent),
+    radial-gradient(2.6px 2.6px at 714px 624px, rgba(217,204,255,0.98), transparent);
+  background-size: 760px 760px;
+  animation: twinkle 5s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes twinkle {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 천천히 흐르는 별똥별 하나 */
+.shooting-star {
+  position: fixed;
+  top: 12%;
+  left: -10%;
+  width: 120px;
+  height: 1.5px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95));
+  border-radius: 999px;
+  opacity: 0;
+  transform: rotate(18deg);
+  animation: shoot 14s ease-in 3s infinite;
+}
+
+@keyframes shoot {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(18deg);
+  }
+  2% {
+    opacity: 1;
+  }
+  9% {
+    opacity: 0;
+    transform: translate(120vw, 40vw) rotate(18deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(120vw, 40vw) rotate(18deg);
+  }
+}
+
+/* 움직임을 줄이도록 설정한 사람에게는 애니메이션을 끈다. */
+@media (prefers-reduced-motion: reduce) {
+  body::after,
+  .stars-near,
+  .shooting-star {
+    animation: none;
+  }
+  .shooting-star {
+    display: none;
+  }
+}
+
+/* ───────── 제목 ───────── */
+.title-glow {
+  background: linear-gradient(100deg, #d8ccff 0%, #8ee8ff 45%, #ffc4ef 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 18px rgba(139, 123, 255, 0.55))
+    drop-shadow(0 0 40px rgba(94, 231, 255, 0.25));
+}
+
+/* ───────── 공통 부품 ───────── */
+.space-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 1rem;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 10px 40px -12px rgba(70, 40, 200, 0.45);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.space-card-selected {
+  border-color: rgba(94, 231, 255, 0.65);
+  box-shadow:
+    0 0 0 1px rgba(94, 231, 255, 0.25) inset,
+    0 0 28px -4px rgba(94, 231, 255, 0.35),
+    0 10px 40px -12px rgba(70, 40, 200, 0.5);
+}
+
+.space-input {
+  background: rgba(10, 6, 30, 0.7);
+  border: 1px solid var(--card-border);
+  border-radius: 0.85rem;
+  color: var(--space-ink);
+  outline: none;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.space-input::placeholder {
+  color: var(--space-faint);
+}
+.space-input:focus {
+  border-color: var(--nebula-cyan);
+  box-shadow: 0 0 0 3px rgba(94, 231, 255, 0.18), 0 0 24px rgba(94, 231, 255, 0.2);
+}
+
+.btn-primary {
+  background: linear-gradient(120deg, #6f5bff, #3aa7ff 60%, #35d6ff);
+  color: #fff;
+  border-radius: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 6px 24px -6px rgba(100, 90, 255, 0.7);
+  transition:
+    transform 0.15s,
+    box-shadow 0.2s,
+    filter 0.2s;
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 8px 32px -4px rgba(100, 160, 255, 0.85);
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+.btn-ghost {
+  border: 1px solid var(--card-border);
+  background: rgba(30, 20, 70, 0.45);
+  color: var(--space-ink);
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+.btn-ghost:hover {
+  background: rgba(70, 50, 150, 0.5);
+  border-color: rgba(150, 130, 255, 0.6);
+}
+
+.space-link {
+  color: var(--nebula-cyan);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.space-link:hover {
+  color: #b8f4ff;
+}
+
+/* 키보드로 이동할 때도 눈에 띄게 */
+:focus-visible {
+  outline: 2px solid var(--nebula-cyan);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(139, 123, 255, 0.5);
+  color: #fff;
 }
