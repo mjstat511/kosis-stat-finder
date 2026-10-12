@@ -1,4 +1,4 @@
-# first trial 개발 계획 (PLAN)
+# 통계표 찾기 개발 계획 (PLAN)
 
 - **기준 문서**: PRD.md
 - **작성자**: pioneer

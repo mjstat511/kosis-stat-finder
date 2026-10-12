@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "first trial",
-  description: "KOSIS 통계를 찾아 답해드려요",
+  title: "통계표 찾기",
+  description: "별처럼 흩어진 KOSIS 통계표에서 답을 찾아 드려요",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -23,7 +23,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* 배경 장식: 먼 별, 가까운 별, 별똥별 (읽기 전용 장식이라 스크린리더가 읽지 않는다) */}
+        <div className="stars-far" aria-hidden="true" />
+        <div className="stars-near" aria-hidden="true" />
+        <div className="shooting-star" aria-hidden="true" />
+        {children}
+      </body>
     </html>
   );
 }

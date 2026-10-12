@@ -10,44 +10,40 @@ type Props = {
 export default function CandidateList({ candidates, selected, onSelect }: Props) {
   return (
     <section aria-label="후보 통계표" className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">후보 통계표</h2>
-      <ul className="flex flex-col gap-2">
+      <h2 className="text-lg font-semibold text-[var(--nebula-violet)]">✧ 후보 통계표</h2>
+      <ul className="flex flex-col gap-3">
         {candidates.map((c, i) => {
           const isSelected = c.tblId === selected;
           return (
             <li
               key={c.tblId}
-              className={`flex flex-col gap-1 rounded-lg border p-4 ${
-                isSelected
-                  ? "border-blue-600 bg-blue-50 dark:bg-blue-950/40"
-                  : "border-zinc-200 dark:border-zinc-800"
-              }`}
+              className={`space-card flex flex-col gap-1.5 p-4 ${isSelected ? "space-card-selected" : ""}`}
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="font-medium">
                   {c.tblName}
                   {i === 0 && (
-                    <span className="ml-2 text-xs text-zinc-500">1순위</span>
+                    <span className="ml-2 rounded-full bg-[rgba(139,123,255,0.25)] px-2 py-0.5 text-xs text-[var(--nebula-violet)]">
+                      1순위
+                    </span>
                   )}
                 </p>
                 {isSelected ? (
-                  <span className="shrink-0 text-sm font-medium text-blue-700 dark:text-blue-400">
-                    선택됨
+                  <span className="shrink-0 text-sm font-medium text-[var(--nebula-cyan)]">
+                    ● 선택됨
                   </span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => onSelect(c.tblId)}
-                    className="shrink-0 rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                    className="btn-ghost shrink-0 rounded-lg px-3 py-1 text-sm"
                   >
                     이 표로 보기
                   </button>
                 )}
               </div>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                이유: {c.reason}
-              </p>
-              <p className="text-sm text-zinc-500">수록 기간 {c.period}</p>
+              <p className="text-sm text-[var(--space-dim)]">이유: {c.reason}</p>
+              <p className="text-sm text-[var(--space-faint)]">수록 기간 {c.period}</p>
             </li>
           );
         })}
